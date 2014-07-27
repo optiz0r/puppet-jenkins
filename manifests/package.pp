@@ -11,6 +11,7 @@
 #   Useful for distributions that ship the package under a different name.
 class jenkins::package (
     $package = 'jenkins',
+    $category = undef,
 ){
 
   if $caller_module_name != $module_name {
@@ -18,6 +19,7 @@ class jenkins::package (
   }
 
   package { $package:
-    ensure => $::jenkins::version;
+    ensure   => $::jenkins::version,
+    category => $category;
   }
 }
