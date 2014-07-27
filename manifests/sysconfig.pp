@@ -6,6 +6,7 @@ define jenkins::sysconfig ( $value ) {
     'RedHat' => '/etc/sysconfig',
     'Suse'   => '/etc/sysconfig',
     'Debian' => '/etc/default',
+    'Gentoo' => '/etc/conf.d',
     default  => fail( "Unsupported OSFamily ${::osfamily}" )
   }
 
