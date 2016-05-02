@@ -48,6 +48,7 @@ describe Puppet::Jenkins::Plugins do
     context 'when plugins exist' do
       it 'should generate a list of plugins' do
         pending 'This is too hard to unit test, feh.'
+        fail
       end
     end
   end
@@ -86,7 +87,7 @@ Url: http://wiki.jenkins-ci.org/display/JENKINS/Ant+Plugin
 Plugin-Version: 1.2
 Hudson-Version: 1.456
 Jenkins-Version: 1.456
-Plugin-Developers: 
+Plugin-Developers:
 
 '
       end
@@ -141,6 +142,15 @@ Plugin-Developers: Kohsuke Kawaguchi:kohsuke:,Nicolas De Loof:ndeloof:
     it { should be_instance_of Hash }
     # Our fixture file currently has 870 plugins in it
     its(:size) { should eql 870 }
+
+    context 'when json is not available' do
+      before :each do
+        expect(::Kernel).to receive(:require).with('json').and_raise(LoadError)
+        expect(::Kernel).to receive(:require).with('puppet/jenkins/okjson').and_call_original
+      end
+
+      it { should be_instance_of Hash }
+    end
   end
 
   let(:git_plugin) do
@@ -176,4 +186,3 @@ Plugin-Developers: Kohsuke Kawaguchi:kohsuke:,Nicolas De Loof:ndeloof:
     "wiki"=>"https://wiki.jenkins-ci.org/display/JENKINS/Git+Plugin"}
   end
 end
-

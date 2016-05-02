@@ -7,13 +7,14 @@ class jenkins::repo::debian
   }
 
   include stdlib
+  include apt
 
   if $::jenkins::lts  {
     apt::source { 'jenkins':
       location    => 'http://pkg.jenkins-ci.org/debian-stable',
       release     => 'binary/',
       repos       => '',
-      key         => 'D50582E6',
+      key         => '150FDE3F7787E7D11EF4E12A9B7D32F2D50582E6',
       key_source  => 'http://pkg.jenkins-ci.org/debian/jenkins-ci.org.key',
       include_src => false,
     }
@@ -23,7 +24,7 @@ class jenkins::repo::debian
       location    => 'http://pkg.jenkins-ci.org/debian',
       release     => 'binary/',
       repos       => '',
-      key         => 'D50582E6',
+      key         => '150FDE3F7787E7D11EF4E12A9B7D32F2D50582E6',
       key_source  => 'http://pkg.jenkins-ci.org/debian/jenkins-ci.org.key',
       include_src => false,
     }
@@ -33,6 +34,3 @@ class jenkins::repo::debian
     Apt::Source['jenkins'] ->
     anchor { 'jenkins::repo::debian::end': }
 }
-
-
-
