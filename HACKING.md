@@ -69,3 +69,10 @@ Resources may be validated in the catalog using:
  * `contain_package('puppet')`
  * And so forth for other Puppet resources.
 
+## Acceptance testings
+
+Acceptance tests are setup using [Beaker](https://github.com/puppetlabs/beaker), which will spin up an instance (by default [Vagrant](https://www.vagrantup.com/), but also supports various VPC's), apply the puppet code against this spun up node and then uses [Serverspec](http://serverspec.org/) tests to validate behaviour.
+
+To run the tests:
+
+ * `bundle exec rspec spec/acceptance/`

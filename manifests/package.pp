@@ -18,9 +18,9 @@ class jenkins::package (
     fail("Use of private class ${name} by ${caller_module_name}")
   }
 
-  package { 'jenkins':
-    ensure   => $::jenkins::version,
+  package { $::jenkins::package_name:
+    ensure => $::jenkins::version,
     category => $category,
-    name     => $package;
+    name     => $::jenkins::package_name;
   }
 }

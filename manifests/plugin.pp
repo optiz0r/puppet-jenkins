@@ -6,81 +6,132 @@
 #   Content of the config file for this plugin. It is up to the caller to
 #   create this content from a template or any other mean.
 #
+# update_url = undef
+#
+# source = undef
+#   Direct URL from which to download plugin without modification.  This is
+#   particularly useful for development and testing of plugins which may not be
+#   hosted in the typical Jenkins' plugin directory structure.  E.g.,
+#
+#   https://example.org/myplugin.hpi
+#
 define jenkins::plugin(
-  $version=0,
+  $version         = 0,
   $manage_config   = false,
   $config_filename = undef,
   $config_content  = undef,
+  $update_url      = undef,
+  $enabled         = true,
+  $source          = undef,
+  $digest_string   = '',
+  $digest_type     = 'sha1',
+  # deprecated
+  $plugin_dir      = undef,
+  $username        = undef,
+  $group           = undef,
+  $create_user     = true,
 ) {
+  include ::jenkins
 
-  $plugin            = "${name}.hpi"
-  $plugin_dir        = '/var/lib/jenkins/plugins'
-  $plugin_parent_dir = inline_template('<%= @plugin_dir.split(\'/\')[0..-2].join(\'/\') %>')
-  validate_bool ($manage_config)
+  validate_bool($manage_config)
+  validate_bool($enabled)
+  # TODO: validate_str($update_url)
+  validate_string($source)
+  validate_string($digest_string)
+  validate_string($digest_type)
+
+  if $plugin_dir {
+    warning('jenkins::plugin::plugin_dir is deprecated and has no effect -- see jenkins::localstatedir')
+  }
+  if $username {
+    warning('jenkins::plugin::username is deprecated and has no effect -- see jenkins::user')
+  }
+  if $group {
+    warning('jenkins::plugin::group is deprecated and has no effect -- see jenkins::group')
+  }
+  if $create_user {
+    warning('jenkins::plugin::create_user is deprecated and has no effect')
+  }
 
   if ($version != 0) {
-    $base_url = "http://updates.jenkins-ci.org/download/plugins/${name}/${version}/"
+    $plugins_host = $update_url ? {
+      undef   => $::jenkins::default_plugins_host,
+      default => $update_url,
+    }
+    $base_url = "${plugins_host}/download/plugins/${name}/${version}/"
     $search   = "${name} ${version}(,|$)"
   }
   else {
-    $base_url = 'http://updates.jenkins-ci.org/latest/'
+    $plugins_host = $update_url ? {
+      undef   => $::jenkins::default_plugins_host,
+      default => $update_url,
+    }
+    $base_url = "${plugins_host}/latest/"
     $search   = "${name} "
   }
 
-  if (!defined(File[$plugin_dir])) {
-    file { [$plugin_parent_dir, $plugin_dir]:
-      ensure  => directory,
-      owner   => 'jenkins',
-      group   => 'jenkins',
-      mode    => '0755',
-      require => [Group['jenkins'], User['jenkins']],
-    }
+  # if $source is specified, it overrides any other URL construction
+  $download_url = $source ? {
+    undef   => "${base_url}${name}.hpi",
+    default => $source,
   }
 
-  if (!defined(Group['jenkins'])) {
-    group { 'jenkins' :
-      ensure  => present,
-      require => Package['jenkins'],
-    }
-  }
-
-  if (!defined(User['jenkins'])) {
-    user { 'jenkins' :
-      ensure  => present,
-      home    => $plugin_parent_dir,
-      require => Package['jenkins'],
-    }
-  }
-
-  if (!defined(Package['wget'])) {
-    package { 'wget' :
-      ensure => present,
-    }
-  }
+  $plugin_ext = regsubst($download_url, '^.*\.(hpi|jpi)$', '\1')
+  $plugin     = "${name}.${plugin_ext}"
 
   if (empty(grep([ $::jenkins_plugins ], $search))) {
-
-    if ($jenkins::proxy_host){
-      Exec {
-        environment => [
-          "http_proxy=${jenkins::proxy_host}:${jenkins::proxy_port}",
-          "https_proxy=${jenkins::proxy_host}:${jenkins::proxy_port}"
-        ]
-      }
+    if ($jenkins::proxy_host) {
+      $proxy_server = "${jenkins::proxy_host}:${jenkins::proxy_port}"
+    } else {
+      $proxy_server = undef
     }
 
-    exec { "download-${name}" :
-      command    => "rm -rf ${name} ${name}.* && wget --no-check-certificate ${base_url}${plugin}",
-      cwd        => $plugin_dir,
-      require    => [File[$plugin_dir], Package['wget']],
-      path       => ['/usr/bin', '/usr/sbin', '/bin'],
+    $enabled_ensure = $enabled ? {
+      false   => present,
+      default => absent,
     }
 
-    file { "${plugin_dir}/${plugin}" :
-      require => Exec["download-${name}"],
-      owner   => 'jenkins',
+    # Allow plugins that are already installed to be enabled/disabled.
+    file { "${::jenkins::plugin_dir}/${plugin}.disabled":
+      ensure  => $enabled_ensure,
+      owner   => $::jenkins::user,
+      group   => $::jenkins::group,
       mode    => '0644',
+      require => File["${::jenkins::plugin_dir}/${plugin}"],
       notify  => Service['jenkins'],
+    }
+
+    file { "${::jenkins::plugin_dir}/${plugin}.pinned":
+      owner   => $::jenkins::user,
+      group   => $::jenkins::group,
+      require => Archive::Download[$plugin],
+    }
+
+    if $digest_string == '' {
+      $checksum = false
+    } else {
+      $checksum = true
+    }
+
+    archive::download { $plugin:
+      url              => $download_url,
+      src_target       => $::jenkins::plugin_dir,
+      allow_insecure   => true,
+      follow_redirects => true,
+      checksum         => $checksum,
+      digest_string    => $digest_string,
+      digest_type      => $digest_type,
+      user             => $::jenkins::user,
+      proxy_server     => $proxy_server,
+      notify           => Service['jenkins'],
+      require          => File[$::jenkins::plugin_dir],
+    }
+
+    file { "${::jenkins::plugin_dir}/${plugin}" :
+      require => Archive::Download[$plugin],
+      owner   => $::jenkins::user,
+      group   => $::jenkins::group,
+      mode    => '0644',
     }
   }
 
@@ -89,11 +140,11 @@ define jenkins::plugin(
       fail 'To deploy config file for plugin, you need to specify both $config_filename and $config_content'
     }
 
-    file {"${plugin_parent_dir}/${config_filename}":
+    file {"${::jenkins::localstatedir}/${config_filename}":
       ensure  => present,
       content => $config_content,
-      owner   => 'jenkins',
-      group   => 'jenkins',
+      owner   => $::jenkins::user,
+      group   => $::jenkins::group,
       mode    => '0644',
       notify  => Service['jenkins']
     }
